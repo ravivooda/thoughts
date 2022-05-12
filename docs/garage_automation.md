@@ -69,6 +69,9 @@ Alerting everytime the door is opened is not very helpful. Especially when I rem
 
 ![IMG_02876031C5CF-1](https://user-images.githubusercontent.com/3404838/168119958-6d5dcbe2-29f3-4ba0-a796-269453479907.jpeg)
 
+#### Announce Notifcations
+
+Since I use Carplay I wanted Siri to alert me immediately when receiving alerts from IFTTT, and announce whenever possible.
 
 #### Ending
 
