@@ -38,8 +38,10 @@ In another words, instead of asking "help me build backend for social networking
 
 and so on....
 
-Now an LLM has a smaller problem to solve at each step, which mean the solutions generated have less chance of getting it wrong. This is kinda emulated in how teams and orgs are structured in a company too. Again it resonates, make everyone/everything minimally responsibile, clearly devided problems. 
+Now an LLM has a smaller problem to solve at each step, which mean the solutions generated have less chance of getting it wrong. This is kinda emulated in how teams and orgs are structured in a company too. Again it resonates, make everyone/everything minimally responsibile, clearly devided responsibilities. 
+
+So for the folks, who are innovating and bootstraping AI Agents, it's crucial to break down the problem for the Agent into minimally responsible sub problems that tie in together. In another words a maze! 
 
 I want to call this "Making Mazes Great Again"
 
-
+For the Agent Builders, think of every step in your agent's workflow, what are possible solutions when evaluating each step, if it has more than 2, break it down into more steps. Make the LLM walk through the maze you've designed. 
