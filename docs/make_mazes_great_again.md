@@ -2,13 +2,7 @@
 
 When building Paradigm Shifting - AI agents or using LLMs, don’t ask them to solve big problems all at once. Break the task into modular, minimally responsible components—just like you’d do when structuring real-world engineering teams.
 
-✅ Smaller prompts = better results
-
-✅ Clear responsibilities = easier integration
-
-✅ Well-designed mazes = smarter agents
-
-Agent builders: Make Mazes Great Again.
+Think of yourself as a maze architect—designing a path for the LLM to navigate from a clear entry point to multiple potential exits (solutions), step by step.
 
 ---
 
