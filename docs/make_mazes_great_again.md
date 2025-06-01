@@ -1,47 +1,92 @@
-When [Margaret Hamilton]() wrote Apollo Guidance, the mission critical software for Lunar Landing, it took her and the team 6+ years to build it. Her team consisted of 350 people at peak, comprising software engineers, mathematicians, System Analysts and more. She is also known for coining the term "Software Engineering" bringing many of current techniques like rigorous testing, error detection, task scheduling and management. Honestly she is so inspiring the more you learn about her.
+### TL;DR
 
-If you look at the requirements of the system built, they can be summarized (somewhat naively) as following: 
+When building Paradigm Shifting - AI agents or using LLMs, don’t ask them to solve big problems all at once. Break the task into modular, minimally responsible components—just like you’d do when structuring real-world engineering teams.
 
-1. Sensor Integration and Data Fusion: Read and sanitize inputs from gyrometers, accelerometers etc.
-2. Actuator Control: Send commands to thrusters, throttlers. Integrate feedback loop.
-3. Provide Fault Tolerance and Reliability: Gracefully handle hardware faults, restarts critical modules 
-4. User Interface with Astronauts: Show System Health, metrics and controls to Astronauts. Allow manual overrides.
-5. Task Prioritization: System should prioritize tasks with higher priority, for ex., controlling descent throttling. 
+✅ Smaller prompts = better results
 
-If you ask an MIT Research Labs in 2020 (pre-GPT era), they probably could build the system with 10 folks, but most importantly in a couple of years. (There is a whole rabbit hole of hardware limitations that we are not even accounting for).
+✅ Clear responsibilities = easier integration
 
-If you ask the same question today, I think you could build it in 2 months with the support of LLM Models. 
+✅ Well-designed mazes = smarter agents
 
-In many ways, she and her team was generating a new paradigm of computing (aka software) manually. Every introduction of paradigm in the industry has made significant gains on overall developer velocity. A few examples come to mind: 
+Agent builders: Make Mazes Great Again.
 
-1. Object-Oriented Programming: Immensely helped reusability of code with inheritance, encapsulation etc.
-2. Relational Databases: Made storing and fetching data on demand trivial. 
-3. Cloud Infrastructure as Code: Instantaneous environments without massive investment in hardware, repeatable and scalable deployments.
-4. Machine Learning Platforms: Identify patterns in logic, avoiding writing so many things manually.
+---
 
+### **Template for Building Agents: Making Mazes Great Again**
 
-But what made them THEM? What made them so powerful each time they cut velocity to develop in half in a specific domain?
-We've often heard that responsibilities of modules/classes/teams/organizations should be clear, separate and minimal. But why is that? Is it because clean responsibilities give way to clean representation of logic? I fathom yes! 
-When we build modules with minimal responsibilities and dependencies, it makes integration between the components trivial. (There is a tech debt aspect which we are not going into).
+When [Margaret Hamilton](https://en.wikipedia.org/wiki/Margaret_Hamilton_(software_engineer)) wrote the Apollo Guidance Software—the mission-critical system for the lunar landing—it took over **6 years** and a team of **350 engineers, mathematicians, and analysts** at its peak. Margaret didn’t just lead the team; she pioneered the term *“Software Engineering,”* bringing with it concepts we now take for granted: rigorous testing, fault tolerance, task scheduling, and so much more.
 
-My thesis is if we adopt the same approach when utilizing LLM models for solving a complex problem (like bring up a social networking service globally), it would yeild more fruitful results than just throwing the LLM at the entire thing. 
+Honestly, the more you learn about her, the more inspiring she becomes.
 
-In another words, instead of asking "help me build backend for social networking service", ask it solve each problem underneath step by step. (This is actually not that good of a list)
+If you look at the (somewhat simplified) system requirements her team had to tackle, they break down as follows:
 
-1. Help me choose a Cloud Provider (GCP vs Amazon)
-2. Which Orchestration platform suits better? (Kubernetes vs ECS)
-3. Design and implement user service (signup, login, sessions)
-4. Build auth system (JWT, OAuth2 support, session tokens)
-5. Implement feed service (CRUD posts, timeline queries)
-6. Implement social graph service (follows, blocks, mutes)
-7. Implement media service (upload, thumbnailing, video transcode)
+1. **Sensor Integration and Data Fusion** – Read and sanitize inputs from gyroscopes, accelerometers, etc.
+2. **Actuator Control** – Send precise commands to thrusters and throttlers, while maintaining a feedback loop.
+3. **Fault Tolerance and Reliability** – Gracefully handle hardware faults and ensure critical modules can restart safely.
+4. **User Interface with Astronauts** – Display system health, key metrics, and allow manual overrides.
+5. **Task Prioritization** – Automatically prioritize high-stakes tasks like descent control over background processes.
 
-and so on....
+If you asked a top-tier MIT lab to build the same system in 2020 (pre-LLMs), they could probably do it with a team of 10 engineers in a couple of years—thanks to decades of evolution in hardware and tooling.
+Ask that question *today*, and with the help of LLMs, it might just be doable in **two months**.
 
-Now an LLM has a smaller problem to solve at each step, which mean the solutions generated have less chance of getting it wrong. This is kinda emulated in how teams and orgs are structured in a company too. Again it resonates, make everyone/everything minimally responsibile, clearly devided responsibilities. 
+Why? Because Margaret and her team were manually creating a *new paradigm* of software development. And with every major paradigm shift since then, developer velocity has soared.
 
-So for the folks, who are innovating and bootstraping AI Agents, it's crucial to break down the problem for the Agent into minimally responsible sub problems that tie in together. In another words a maze! 
+Here are a few of those leaps:
 
-I want to call this "Making Mazes Great Again"
+* **Object-Oriented Programming** – Enabled code reusability through encapsulation and inheritance.
+* **Relational Databases** – Made data retrieval and storage near-trivial.
+* **Cloud Infrastructure as Code** – Gave us on-demand environments with minimal hardware investment.
+* **Machine Learning Platforms** – Abstracted logic via pattern recognition, replacing a lot of manual rules.
 
-For the Agent Builders, think of every step in your agent's workflow, what are possible solutions when evaluating each step, if it has more than 2, break it down into more steps. Make the LLM walk through the maze you've designed. 
+But what do all these have in common? What made these paradigms *work*?
+
+It comes down to **clarity and minimalism in responsibility**. We’ve all heard it before—classes, modules, teams, orgs... all should have **clear, minimal, and separate responsibilities**.
+Why? Because this structure leads to **cleaner integration**. When components are well-defined and self-contained, connecting them becomes *trivial* (well, mostly—let’s park the tech debt conversation for another day).
+
+### **So What Does This Mean for AI Agents?**
+
+Here’s my thesis:
+If we apply this same mindset to how we **utilize LLMs**, especially for complex systems like spinning up a global social networking platform, we’ll get *much* better outcomes.
+
+Instead of throwing an LLM at an ambiguous prompt like:
+
+> “Help me build the backend for a social networking site”
+
+Break it down.
+
+Just like building a rocket guidance system, decompose the problem into minimal, interlocking tasks. For example:
+
+1. Help me choose a cloud provider (GCP vs AWS)
+2. Which orchestration platform fits better? (Kubernetes vs ECS)
+3. Design a user service (signup, login, sessions)
+4. Build an auth system (OAuth2, JWT, sessions)
+5. Implement a feed service (CRUD posts, timelines)
+6. Build a social graph (follows, blocks, mutes)
+7. Set up a media pipeline (uploads, thumbnails, transcodes)
+
+Now, each prompt given to the LLM is scoped, clear, and constrained. Which means the LLM’s output is **far more accurate and actionable**.
+
+Sound familiar? That’s how *real teams* are structured too.
+Every team owns a narrow slice of responsibility—but together, they build a world-changing product.
+
+### **For Agent Builders: Make Mazes, Not Messes**
+
+So, if you’re working on bootstrapping **AI Agents**, don’t just throw the whole project at them. **Architect the maze.**
+Break your agent’s responsibilities down into **clearly defined, minimal sub-problems**, and think through how each one ties to the next.
+
+If a task has **more than two possible execution paths**, break it down further.
+
+Design the maze—and make the LLM walk through it.
+
+That’s how you get not just an Agent that “kind of works,” but one that’s maintainable, reliable, and surprisingly smart.
+
+Let’s call this approach:
+
+> **“Making Mazes Great Again.”**
+
+And if Margaret were building Agents today?
+She’d probably be mapping out mazes too.
+
+---
+
+Drafted and [cleaned up](https://chatgpt.com/share/683ce33c-1fc4-800d-98ad-cf982135458c) by ChatGPT
