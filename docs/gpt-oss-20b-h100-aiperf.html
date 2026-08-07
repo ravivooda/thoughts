@@ -1,0 +1,1047 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GPT-OSS-20B on a Single H100 — vLLM + NVIDIA AIPerf</title>
+  <meta name="description" content="Measured throughput, latency, concurrency, and KV-cache pressure for GPT-OSS-20B served by vLLM on one NVIDIA H100.">
+  <meta property="og:title" content="GPT-OSS-20B on a Single H100">
+  <meta property="og:description" content="A vLLM and NVIDIA AIPerf study of throughput, latency, continuous batching, and KV-cache pressure.">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://ravivooda.github.io/thoughts/gpt-oss-20b-h100-aiperf.html">
+  <meta name="twitter:card" content="summary">
+  <meta name="theme-color" content="#f2eee5">
+  <style>
+    :root {
+      --paper: #f2eee5;
+      --surface: #fbf9f4;
+      --ink: #13251f;
+      --muted: #5e6b65;
+      --line: #d7d0c3;
+      --green: #17654f;
+      --green-soft: #dce9e2;
+      --orange: #d66438;
+      --orange-soft: #f3dfd4;
+      --blue: #436e8e;
+      --slate: #708077;
+      --white: #ffffff;
+      --shadow: 0 18px 46px rgba(19, 37, 31, 0.08);
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      background: var(--paper);
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        linear-gradient(rgba(19, 37, 31, 0.025) 1px, transparent 1px),
+        var(--paper);
+      background-size: 100% 32px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.6;
+    }
+
+    a {
+      color: var(--green);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+
+    a:hover { color: var(--orange); }
+
+    code {
+      padding: 0.12rem 0.32rem;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      background: rgba(255, 255, 255, 0.55);
+      font: 0.88em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    .shell {
+      width: min(1180px, calc(100% - 40px));
+      margin: 0 auto;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 0;
+      font-size: 0.84rem;
+      letter-spacing: 0.02em;
+    }
+
+    .brand {
+      color: var(--ink);
+      font-weight: 760;
+      text-decoration: none;
+    }
+
+    .topbar nav {
+      display: flex;
+      gap: 20px;
+    }
+
+    .topbar nav a {
+      color: var(--muted);
+      text-decoration: none;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.55fr) minmax(280px, 0.65fr);
+      gap: 56px;
+      align-items: end;
+      padding: 86px 0 72px;
+      border-top: 1px solid var(--line);
+    }
+
+    .eyebrow {
+      margin: 0 0 20px;
+      color: var(--green);
+      font-size: 0.77rem;
+      font-weight: 780;
+      letter-spacing: 0.13em;
+      text-transform: uppercase;
+    }
+
+    h1, h2, h3 {
+      font-family: Georgia, "Times New Roman", serif;
+      font-weight: 500;
+      letter-spacing: -0.025em;
+    }
+
+    h1 {
+      max-width: 820px;
+      margin: 0;
+      font-size: clamp(3rem, 7.2vw, 6.7rem);
+      line-height: 0.94;
+    }
+
+    .lede {
+      max-width: 760px;
+      margin: 30px 0 0;
+      color: var(--muted);
+      font-size: clamp(1.05rem, 2vw, 1.34rem);
+      line-height: 1.55;
+    }
+
+    .hero-meta {
+      padding: 24px 0 3px;
+      border-top: 2px solid var(--ink);
+    }
+
+    .hero-meta dl {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 10px 18px;
+      margin: 0;
+      font-size: 0.9rem;
+    }
+
+    .hero-meta dt { color: var(--muted); }
+    .hero-meta dd { margin: 0; font-weight: 680; }
+
+    .summary-band {
+      padding: 32px 0;
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.3);
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1px;
+      background: var(--line);
+      border: 1px solid var(--line);
+    }
+
+    .metric {
+      min-height: 156px;
+      padding: 24px;
+      background: var(--surface);
+    }
+
+    .metric strong {
+      display: block;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(1.9rem, 4vw, 3.1rem);
+      font-weight: 500;
+      line-height: 1;
+    }
+
+    .metric span {
+      display: block;
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 0.86rem;
+      line-height: 1.4;
+    }
+
+    main { padding: 88px 0 40px; }
+
+    .section {
+      display: grid;
+      grid-template-columns: 260px minmax(0, 1fr);
+      gap: 64px;
+      padding: 0 0 98px;
+    }
+
+    .section-label {
+      position: sticky;
+      top: 24px;
+      align-self: start;
+    }
+
+    .section-label .index {
+      display: block;
+      color: var(--orange);
+      font: 700 0.76rem ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: 0.09em;
+    }
+
+    .section-label h2 {
+      margin: 7px 0 0;
+      font-size: clamp(1.85rem, 3vw, 2.6rem);
+      line-height: 1.08;
+    }
+
+    .section-body > :first-child { margin-top: 0; }
+
+    .standfirst {
+      max-width: 800px;
+      margin-bottom: 32px;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(1.35rem, 2.4vw, 1.88rem);
+      line-height: 1.42;
+    }
+
+    .finding-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 18px;
+    }
+
+    .finding {
+      padding: 24px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(251, 249, 244, 0.72);
+    }
+
+    .finding .number {
+      color: var(--orange);
+      font: 700 0.75rem ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    .finding h3 {
+      margin: 9px 0 7px;
+      font-size: 1.35rem;
+    }
+
+    .finding p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.93rem;
+    }
+
+    .callout {
+      margin: 30px 0;
+      padding: 28px 30px;
+      border-left: 5px solid var(--orange);
+      background: var(--orange-soft);
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 1.23rem;
+      line-height: 1.5;
+    }
+
+    .chart-card {
+      margin: 28px 0;
+      padding: 26px 28px 22px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+
+    .chart-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+      align-items: baseline;
+      margin-bottom: 12px;
+    }
+
+    .chart-head h3 {
+      margin: 0;
+      font-size: 1.45rem;
+    }
+
+    .unit {
+      color: var(--muted);
+      font: 0.77rem ui-monospace, SFMono-Regular, Menlo, monospace;
+      white-space: nowrap;
+    }
+
+    .chart-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 18px;
+      min-height: 28px;
+      margin-bottom: 4px;
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .legend-line {
+      width: 22px;
+      height: 3px;
+      border-radius: 2px;
+    }
+
+    .chart svg {
+      display: block;
+      width: 100%;
+      height: auto;
+      overflow: visible;
+    }
+
+    .chart-note {
+      margin: 12px 0 0;
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+
+    .chart-pair {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 20px;
+    }
+
+    .chart-pair .chart-card {
+      padding: 22px 22px 18px;
+    }
+
+    .chart-pair .chart-head {
+      display: block;
+    }
+
+    .chart-pair .unit {
+      display: block;
+      margin-top: 4px;
+    }
+
+    .table-wrap {
+      margin: 28px 0;
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--surface);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.86rem;
+      font-variant-numeric: tabular-nums;
+    }
+
+    th, td {
+      padding: 13px 15px;
+      border-bottom: 1px solid var(--line);
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    th:first-child, td:first-child { text-align: left; }
+
+    thead th {
+      color: var(--muted);
+      background: rgba(23, 101, 79, 0.055);
+      font-size: 0.72rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    tbody tr:last-child td { border-bottom: 0; }
+    tbody tr.highlight { background: var(--green-soft); }
+
+    .kv-bars {
+      display: grid;
+      gap: 16px;
+      margin: 28px 0;
+    }
+
+    .kv-bar-row {
+      display: grid;
+      grid-template-columns: minmax(170px, 1.1fr) 3fr 72px;
+      gap: 14px;
+      align-items: center;
+      font-size: 0.86rem;
+    }
+
+    .bar-track {
+      height: 11px;
+      overflow: hidden;
+      border-radius: 8px;
+      background: #e4ded2;
+    }
+
+    .bar-fill {
+      height: 100%;
+      border-radius: 8px;
+      background: var(--green);
+    }
+
+    .bar-fill.orange { background: var(--orange); }
+
+    .recommendation {
+      display: grid;
+      grid-template-columns: 130px minmax(0, 1fr);
+      gap: 22px;
+      padding: 24px 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .recommendation:last-child { border-bottom: 1px solid var(--line); }
+
+    .recommendation strong {
+      color: var(--green);
+      font: 700 0.78rem ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .recommendation p { margin: 0; }
+
+    .method-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0 32px;
+      margin: 26px 0;
+    }
+
+    .method-grid div {
+      padding: 13px 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .method-grid dt {
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+
+    .method-grid dd {
+      margin: 2px 0 0;
+      font-weight: 650;
+    }
+
+    .footnotes {
+      padding: 28px 0 72px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+
+    .footnotes ol {
+      max-width: 900px;
+      padding-left: 20px;
+    }
+
+    footer {
+      padding: 34px 0 52px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+
+    .footer-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 30px;
+      align-items: center;
+    }
+
+    @media (max-width: 900px) {
+      .hero { grid-template-columns: 1fr; gap: 34px; }
+      .metrics { grid-template-columns: repeat(2, 1fr); }
+      .section { grid-template-columns: 1fr; gap: 28px; }
+      .section-label { position: static; }
+      .chart-pair { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 620px) {
+      .shell { width: min(100% - 24px, 1180px); }
+      .topbar nav a:first-child { display: none; }
+      .hero { padding: 56px 0 50px; }
+      .metrics { grid-template-columns: 1fr; }
+      .metric { min-height: auto; }
+      main { padding-top: 64px; }
+      .section { padding-bottom: 72px; }
+      .finding-grid, .method-grid { grid-template-columns: 1fr; }
+      .chart-card { padding: 20px 14px 17px; border-radius: 12px; }
+      .chart-head { display: block; }
+      .unit { display: block; margin-top: 4px; }
+      .kv-bar-row { grid-template-columns: 1fr 56px; gap: 6px 12px; }
+      .kv-bar-row .bar-track { grid-column: 1 / -1; grid-row: 2; }
+      .recommendation { grid-template-columns: 1fr; gap: 8px; }
+      .footer-row { display: block; }
+    }
+  </style>
+</head>
+<body>
+  <header class="shell">
+    <div class="topbar">
+      <a class="brand" href="./">Ravi Vooda / Thoughts</a>
+      <nav aria-label="Report navigation">
+        <a href="#results">Results</a>
+        <a href="#method">Method</a>
+        <a href="https://github.com/ravivooda/thoughts/tree/main/experiments/inference/gpt-oss-20b-h100-aiperf">Source data</a>
+      </nav>
+    </div>
+
+    <div class="hero">
+      <div>
+        <p class="eyebrow">Inference experiment · August 2026</p>
+        <h1>GPT-OSS-20B on one H100</h1>
+        <p class="lede">
+          A measured study of vLLM throughput, latency, continuous batching, and
+          KV-cache pressure using NVIDIA AIPerf.
+        </p>
+      </div>
+      <aside class="hero-meta" aria-label="Experiment metadata">
+        <dl>
+          <dt>Model</dt><dd>openai/gpt-oss-20b</dd>
+          <dt>GPU</dt><dd>1× H100 80GB HBM3</dd>
+          <dt>Engine</dt><dd>vLLM 0.26.0</dd>
+          <dt>Load</dt><dd>NVIDIA AIPerf 0.12.0</dd>
+          <dt>API</dt><dd>Streaming chat completions</dd>
+        </dl>
+      </aside>
+    </div>
+  </header>
+
+  <section class="summary-band" aria-label="Headline metrics">
+    <div class="shell metrics">
+      <div class="metric">
+        <strong>9,354</strong>
+        <span>peak short-context output tokens/s at concurrency 800</span>
+      </div>
+      <div class="metric">
+        <strong>8,153</strong>
+        <span>peak large-context output tokens/s with auto-sized KV</span>
+      </div>
+      <div class="metric">
+        <strong>200–400</strong>
+        <span>recommended long-context operating range for balance</span>
+      </div>
+      <div class="metric">
+        <strong>28.26 GiB</strong>
+        <span>forced half-KV allocation used in the controlled comparison</span>
+      </div>
+    </div>
+  </section>
+
+  <main class="shell">
+    <section class="section" id="results">
+      <div class="section-label">
+        <span class="index">01 / FINDINGS</span>
+        <h2>What changed under load</h2>
+      </div>
+      <div class="section-body">
+        <p class="standfirst">
+          The GPU reached high aggregate throughput well before the serving system
+          reached a good operating point for users.
+        </p>
+
+        <div class="finding-grid">
+          <article class="finding">
+            <span class="number">01</span>
+            <h3>Throughput plateaued</h3>
+            <p>Short-context throughput flattened between concurrency 400 and 1,600, peaking at 800 before declining.</p>
+          </article>
+          <article class="finding">
+            <span class="number">02</span>
+            <h3>KV pressure appeared as queueing</h3>
+            <p>At saturation, fewer requests stayed resident while waiting queues and time to first token rose sharply.</p>
+          </article>
+          <article class="finding">
+            <span class="number">03</span>
+            <h3>Half KV moved the boundary</h3>
+            <p>With 28.26 GiB, KV reached 100% at concurrency 800 instead of 1,600 under the auto-sized policy.</p>
+          </article>
+          <article class="finding">
+            <span class="number">04</span>
+            <h3>Raw throughput hid the damage</h3>
+            <p>Aggregate output stayed near 8K tokens/s while average TTFT at concurrency 800 rose from 10.0s to 18.3s.</p>
+          </article>
+        </div>
+
+        <div class="callout">
+          KV cache is primarily a capacity resource. Reducing it did not make token
+          generation faster; it reduced the number of requests vLLM could keep resident.
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-label">
+        <span class="index">02 / SHORT CONTEXT</span>
+        <h2>Finding the throughput knee</h2>
+      </div>
+      <div class="section-body">
+        <p class="standfirst">
+          With 256 input and 128 output tokens, the baseline peaked at concurrency
+          800. Beyond that point, aggregate throughput and caller fair share both fell.
+        </p>
+
+        <div class="chart-card">
+          <div class="chart-head">
+            <h3>Output throughput vs. concurrency</h3>
+            <span class="unit">OUTPUT TOKENS / SECOND</span>
+          </div>
+          <div id="short-throughput" class="chart"></div>
+          <p class="chart-note">Baseline: <code>gpu-memory-utilization=0.92</code>, approximately 56.5 GiB KV, 4,096-token maximum model length.</p>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Concurrency</th>
+                <th>Output tok/s</th>
+                <th>Request/s</th>
+                <th>Avg TTFT</th>
+                <th>Avg ITL</th>
+                <th>Fair share tok/s</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>100</td><td>3,305</td><td>26.45</td><td>2.53s</td><td>9.9ms</td><td>33.05</td></tr>
+              <tr><td>200</td><td>7,968</td><td>63.80</td><td>1.28s</td><td>14.7ms</td><td>39.84</td></tr>
+              <tr><td>400</td><td>8,869</td><td>71.00</td><td>1.71s</td><td>31.1ms</td><td>22.17</td></tr>
+              <tr class="highlight"><td>800</td><td><strong>9,354</strong></td><td>74.88</td><td>2.22s</td><td>67.0ms</td><td>11.69</td></tr>
+              <tr><td>1,600</td><td>8,994</td><td>71.99</td><td>3.10s</td><td>145.2ms</td><td>5.62</td></tr>
+              <tr><td>3,200</td><td>8,206</td><td>65.68</td><td>10.51s</td><td>263.6ms</td><td>2.56</td></tr>
+              <tr><td>6,400</td><td>5,067</td><td>40.56</td><td>12.61s</td><td>331.7ms</td><td>0.79</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Short-context KV policy peaks</h3>
+        <p>
+          These runs all remained in a compute-dominated regime. Their peak differences
+          are not evidence that a smaller cache accelerates the model.
+        </p>
+        <div class="kv-bars" aria-label="Peak throughput by KV policy">
+          <div class="kv-bar-row">
+            <span>Auto KV · utilization 0.92</span>
+            <div class="bar-track"><div class="bar-fill" style="width:91.5%"></div></div>
+            <strong>9,354</strong>
+          </div>
+          <div class="kv-bar-row">
+            <span>Auto KV · utilization 0.98</span>
+            <div class="bar-track"><div class="bar-fill" style="width:95.8%"></div></div>
+            <strong>9,792</strong>
+          </div>
+          <div class="kv-bar-row">
+            <span>Exact KV · 28.26 GiB</span>
+            <div class="bar-track"><div class="bar-fill orange" style="width:100%"></div></div>
+            <strong>10,221</strong>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-label">
+        <span class="index">03 / STRESS TEST</span>
+        <h2>Long context exposed capacity</h2>
+      </div>
+      <div class="section-body">
+        <p class="standfirst">
+          The sustained 2,048-input / 512-output workload made KV capacity visible.
+          The auto-sized cache reached its boundary at concurrency 1,600.
+        </p>
+
+        <div class="chart-card">
+          <div class="chart-head">
+            <h3>Aggregate throughput stayed close</h3>
+            <span class="unit">OUTPUT TOKENS / SECOND</span>
+          </div>
+          <div id="stress-throughput" class="chart"></div>
+          <p class="chart-note">The half-KV run is not faster in a causal sense. Both configurations kept the GPU near compute saturation.</p>
+        </div>
+
+        <div class="chart-pair">
+          <div class="chart-card">
+            <div class="chart-head">
+              <h3>Time to first token</h3>
+              <span class="unit">AVERAGE · SECONDS</span>
+            </div>
+            <div id="stress-ttft" class="chart"></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-head">
+              <h3>Maximum KV use</h3>
+              <span class="unit">PERCENT</span>
+            </div>
+            <div id="stress-kv" class="chart"></div>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Concurrency</th>
+                <th>Auto KV tok/s</th>
+                <th>Half KV tok/s</th>
+                <th>Auto TTFT</th>
+                <th>Half TTFT</th>
+                <th>Auto / half KV use</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>50</td><td>4,089</td><td>4,505</td><td>1.12s</td><td>0.74s</td><td>5.1% / 10.6%</td></tr>
+              <tr><td>100</td><td>5,992</td><td>6,108</td><td>0.98s</td><td>0.94s</td><td>10.0% / 21.8%</td></tr>
+              <tr><td>200</td><td>7,620</td><td>7,773</td><td>2.59s</td><td>1.70s</td><td>19.8% / 42.9%</td></tr>
+              <tr><td>400</td><td>7,878</td><td>8,197</td><td>4.82s</td><td>4.77s</td><td>39.6% / 85.5%</td></tr>
+              <tr class="highlight"><td>800</td><td>8,153</td><td>8,362</td><td>9.96s</td><td><strong>18.35s</strong></td><td>80.2% / 100%</td></tr>
+              <tr><td>1,600</td><td>7,228</td><td>7,663</td><td>34.21s</td><td><strong>52.93s</strong></td><td>100% / 100%</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout">
+          At concurrency 800, cutting KV approximately in half increased average TTFT
+          by 84% while aggregate output throughput changed by only 2.6%.
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-label">
+        <span class="index">04 / CAPACITY</span>
+        <h2>The caller sees a different curve</h2>
+      </div>
+      <div class="section-body">
+        <p class="standfirst">
+          Dividing server-wide output throughput by configured concurrency provides
+          a simple fair-share estimate. It falls rapidly after the useful operating range.
+        </p>
+
+        <div class="chart-card">
+          <div class="chart-head">
+            <h3>Estimated output rate per configured caller</h3>
+            <span class="unit">OUTPUT TOKENS / SECOND / CALLER</span>
+          </div>
+          <div id="caller-share" class="chart"></div>
+          <p class="chart-note">Estimate = aggregate output token throughput ÷ configured concurrency. Waiting callers receive no tokens, so this is capacity intuition rather than an individual streaming trace.</p>
+        </div>
+
+        <p>
+          For the auto-KV stress run, concurrency 200 delivered about 38.1 fair-share
+          tokens/s. Raising concurrency to 400 added only 3.4% aggregate output
+          throughput, but reduced fair share to 19.7 tokens/s and increased average
+          TTFT by 86%.
+        </p>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-label">
+        <span class="index">05 / DECISIONS</span>
+        <h2>Serving recommendations</h2>
+      </div>
+      <div class="section-body">
+        <p class="standfirst">
+          Optimize for latency-constrained goodput and queue depth, not the single
+          highest tokens-per-second number.
+        </p>
+
+        <div class="recommendation">
+          <strong>Default range</strong>
+          <p>Start long-context capacity planning around concurrency 200–400 on this hardware and workload, then tune against an explicit TTFT objective.</p>
+        </div>
+        <div class="recommendation">
+          <strong>KV sizing</strong>
+          <p>Use automatic profiling or a conservative explicit <code>--kv-cache-memory-bytes</code> value. A forced 62.05 GiB allocation failed at startup with CUDA OOM.</p>
+        </div>
+        <div class="recommendation">
+          <strong>Admission</strong>
+          <p>Apply request admission control before KV reaches 100%. Queue depth and waiting requests are leading capacity signals.</p>
+        </div>
+        <div class="recommendation">
+          <strong>Benchmarking</strong>
+          <p>Use sustained, duration-bounded workloads with realistic input/output distributions and evaluate TTFT, ITL, and SLO goodput alongside throughput.</p>
+        </div>
+        <div class="recommendation">
+          <strong>Caller metric</strong>
+          <p>Do not interpret aggregate output tokens/s as the stream rate seen by every caller. Track per-request latency distributions in production.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="method">
+      <div class="section-label">
+        <span class="index">06 / METHOD</span>
+        <h2>How the experiment ran</h2>
+      </div>
+      <div class="section-body">
+        <p class="standfirst">
+          AIPerf concurrency was matched to vLLM's <code>--max-num-seqs</code>
+          setting for each sequential server run.
+        </p>
+
+        <dl class="method-grid">
+          <div><dt>Hardware</dt><dd>1× NVIDIA H100 80GB HBM3</dd></div>
+          <div><dt>Model</dt><dd>openai/gpt-oss-20b · MXFP4</dd></div>
+          <div><dt>Tensor parallelism</dt><dd>1</dd></div>
+          <div><dt>KV dtype</dt><dd>auto</dd></div>
+          <div><dt>Short workload</dt><dd>ISL 256 · OSL 128 · max len 4,096</dd></div>
+          <div><dt>Stress workload</dt><dd>ISL 2,048 · OSL 512 · max len 16,384</dd></div>
+          <div><dt>Stress profile</dt><dd>180s profile · 30s warmup</dd></div>
+          <div><dt>Forced half KV</dt><dd>30,343,943,946 bytes · 617,042 tokens</dd></div>
+        </dl>
+
+        <p>
+          vLLM uses continuous batching. Here, “concurrency” is the number of
+          in-flight AIPerf requests, while <code>max-num-seqs</code> is a scheduler
+          cap—not a promise that every request is resident on the GPU at once.
+          Under half-KV pressure, roughly 450–500 requests were running while the
+          remainder waited.
+        </p>
+
+        <p>
+          The complete benchmark matrix, machine-readable results, and runner scripts
+          are available in the
+          <a href="https://github.com/ravivooda/thoughts/tree/main/experiments/inference/gpt-oss-20b-h100-aiperf">experiment directory</a>.
+        </p>
+      </div>
+    </section>
+
+    <aside class="footnotes" aria-label="Notes and limitations">
+      <strong>Notes and limitations</strong>
+      <ol>
+        <li>Results represent one H100, one model build, and the software versions shown. They should not be generalized without rerunning on the target stack.</li>
+        <li>Short-context runs were request-count bounded and more sensitive to warm state and run variance than the sustained stress profiles.</li>
+        <li>The high-memory short-context run at concurrency 1,600 produced an invalid outlier and was excluded from capacity conclusions.</li>
+        <li>Fair-share tokens/s is aggregate throughput divided by configured concurrency. It is not a direct per-user streaming measurement.</li>
+      </ol>
+    </aside>
+  </main>
+
+  <footer>
+    <div class="shell footer-row">
+      <span>Published August 2026 · Ravi Vooda</span>
+      <span><a href="https://github.com/ravivooda/thoughts">Repository</a> · <a href="#results">Back to results</a></span>
+    </div>
+  </footer>
+
+  <script>
+    (() => {
+      const palette = {
+        green: "#17654f",
+        orange: "#d66438",
+        blue: "#436e8e",
+        slate: "#708077",
+        grid: "#d7d0c3",
+        text: "#5e6b65",
+        paper: "#fbf9f4"
+      };
+
+      const short = {
+        labels: ["100", "200", "400", "800", "1,600", "3,200", "6,400"],
+        output: [3305, 7968, 8869, 9354, 8994, 8206, 5067]
+      };
+
+      const stress = {
+        labels: ["50", "100", "200", "400", "800", "1,600"],
+        autoOutput: [4089, 5992, 7620, 7878, 8153, 7228],
+        halfOutput: [4505, 6108, 7773, 8197, 8362, 7663],
+        autoTtft: [1.12, 0.98, 2.59, 4.82, 9.96, 34.21],
+        halfTtft: [0.74, 0.94, 1.70, 4.77, 18.35, 52.93],
+        autoKv: [5.1, 10.0, 19.8, 39.6, 80.2, 100],
+        halfKv: [10.6, 21.8, 42.9, 85.5, 100, 100],
+        autoCaller: [81.78, 59.92, 38.10, 19.69, 10.19, 4.52],
+        halfCaller: [90.10, 61.08, 38.86, 20.49, 10.45, 4.79]
+      };
+
+      function el(name, attrs = {}, text = "") {
+        const node = document.createElementNS("http://www.w3.org/2000/svg", name);
+        Object.entries(attrs).forEach(([key, value]) => node.setAttribute(key, value));
+        if (text !== "") node.textContent = text;
+        return node;
+      }
+
+      function niceMax(value) {
+        if (value <= 0) return 1;
+        const rawStep = value / 4;
+        const magnitude = Math.pow(10, Math.floor(Math.log10(rawStep)));
+        const normalized = rawStep / magnitude;
+        const nice = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 2.5 ? 2.5 : normalized <= 5 ? 5 : 10;
+        const step = nice * magnitude;
+        return Math.ceil(value / step) * step;
+      }
+
+      function formatTick(value, decimals = 0) {
+        if (value >= 1000) {
+          const scaled = value / 1000;
+          return `${scaled % 1 === 0 ? scaled.toFixed(0) : scaled.toFixed(1)}k`;
+        }
+        return Number(value).toFixed(decimals);
+      }
+
+      function drawChart(targetId, labels, series, options = {}) {
+        const host = document.getElementById(targetId);
+        if (!host) return;
+
+        const width = options.compact ? 520 : 920;
+        const height = options.compact ? 330 : 360;
+        const margin = { top: 22, right: 20, bottom: 54, left: 66 };
+        const plotWidth = width - margin.left - margin.right;
+        const plotHeight = height - margin.top - margin.bottom;
+        const values = series.flatMap(item => item.values).filter(Number.isFinite);
+        const yMax = options.max || niceMax(Math.max(...values));
+        const ticks = 4;
+
+        const legend = document.createElement("div");
+        legend.className = "chart-legend";
+        series.forEach(item => {
+          const legendItem = document.createElement("span");
+          legendItem.className = "legend-item";
+          const line = document.createElement("span");
+          line.className = "legend-line";
+          line.style.backgroundColor = item.color;
+          legendItem.append(line, document.createTextNode(item.name));
+          legend.appendChild(legendItem);
+        });
+
+        const svg = el("svg", {
+          viewBox: `0 0 ${width} ${height}`,
+          role: "img",
+          "aria-label": options.ariaLabel || "Line chart"
+        });
+
+        const x = index => margin.left + (labels.length === 1 ? plotWidth / 2 : index * plotWidth / (labels.length - 1));
+        const y = value => margin.top + plotHeight - (value / yMax) * plotHeight;
+
+        for (let i = 0; i <= ticks; i++) {
+          const value = yMax * i / ticks;
+          const yPos = y(value);
+          svg.appendChild(el("line", {
+            x1: margin.left,
+            y1: yPos,
+            x2: width - margin.right,
+            y2: yPos,
+            stroke: palette.grid,
+            "stroke-width": i === 0 ? 1.4 : 1,
+            "stroke-dasharray": i === 0 ? "0" : "3 5"
+          }));
+          svg.appendChild(el("text", {
+            x: margin.left - 12,
+            y: yPos + 4,
+            fill: palette.text,
+            "font-size": 12,
+            "text-anchor": "end",
+            "font-family": "ui-monospace, SFMono-Regular, Menlo, monospace"
+          }, formatTick(value, options.tickDecimals || 0)));
+        }
+
+        labels.forEach((label, index) => {
+          svg.appendChild(el("text", {
+            x: x(index),
+            y: height - 22,
+            fill: palette.text,
+            "font-size": 12,
+            "text-anchor": "middle",
+            "font-family": "ui-monospace, SFMono-Regular, Menlo, monospace"
+          }, label));
+        });
+
+        series.forEach(item => {
+          const points = item.values.map((value, index) => `${x(index)},${y(value)}`).join(" ");
+          svg.appendChild(el("polyline", {
+            points,
+            fill: "none",
+            stroke: item.color,
+            "stroke-width": 3.5,
+            "stroke-linecap": "round",
+            "stroke-linejoin": "round"
+          }));
+
+          item.values.forEach((value, index) => {
+            const circle = el("circle", {
+              cx: x(index),
+              cy: y(value),
+              r: 5,
+              fill: palette.paper,
+              stroke: item.color,
+              "stroke-width": 3
+            });
+            circle.appendChild(el("title", {}, `${item.name}: ${value.toLocaleString()} at concurrency ${labels[index]}`));
+            svg.appendChild(circle);
+          });
+        });
+
+        host.replaceChildren(legend, svg);
+      }
+
+      drawChart("short-throughput", short.labels, [
+        { name: "Baseline output throughput", values: short.output, color: palette.green }
+      ], {
+        ariaLabel: "Short-context output token throughput by concurrency"
+      });
+
+      drawChart("stress-throughput", stress.labels, [
+        { name: "Auto-sized KV", values: stress.autoOutput, color: palette.green },
+        { name: "28.26 GiB KV", values: stress.halfOutput, color: palette.orange }
+      ], {
+        ariaLabel: "Large-context output token throughput comparing auto and half KV"
+      });
+
+      drawChart("stress-ttft", stress.labels, [
+        { name: "Auto-sized KV", values: stress.autoTtft, color: palette.green },
+        { name: "28.26 GiB KV", values: stress.halfTtft, color: palette.orange }
+      ], {
+        compact: true,
+        max: 60,
+        tickDecimals: 0,
+        ariaLabel: "Average time to first token comparing auto and half KV"
+      });
+
+      drawChart("stress-kv", stress.labels, [
+        { name: "Auto-sized KV", values: stress.autoKv, color: palette.green },
+        { name: "28.26 GiB KV", values: stress.halfKv, color: palette.orange }
+      ], {
+        compact: true,
+        max: 100,
+        ariaLabel: "Maximum KV cache utilization comparing auto and half KV"
+      });
+
+      drawChart("caller-share", stress.labels, [
+        { name: "Auto-sized KV", values: stress.autoCaller, color: palette.blue },
+        { name: "28.26 GiB KV", values: stress.halfCaller, color: palette.orange }
+      ], {
+        max: 100,
+        ariaLabel: "Estimated fair-share output tokens per second by concurrency"
+      });
+    })();
+  </script>
+</body>
+</html>

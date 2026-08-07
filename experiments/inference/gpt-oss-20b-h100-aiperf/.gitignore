@@ -1,0 +1,4 @@
+artifacts/
+logs/
+results/sweep_*.json
+__pycache__/
